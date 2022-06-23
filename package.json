@@ -2,5 +2,10 @@
   "dependencies": {
     "express": "^4.18.1",
     "mongodb": "^4.7.0"
-  }
+  },
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "type": "module"
 }
