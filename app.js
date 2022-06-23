@@ -14,7 +14,16 @@ let db;
 
 cliente.connect().then(() => {
     db = cliente.db('batepapo');
-})
+});
+
+server.get("/participants", async (req, res) => {
+    try {
+        const usuarios = await db.collection('users').find().toArray();
+        res.send(usuarios);
+    } catch (error) {
+        res.sendStatus(422);
+    }
+});
 
 server.post("/participants", async (req, res) => {
     const user = req.body;
@@ -33,6 +42,7 @@ server.post("/participants", async (req, res) => {
     } catch (error) {
         res.sendStatus(422);
     }
-})
+});
+
 
 server.listen(5000);
