@@ -6,10 +6,6 @@ import joi from 'joi';
 import dayjs from 'dayjs';
 
 dotenv.config();
-// CONFIG DE CONEXÃO
-const server = express();
-server.use(cors());
-server.use(express.json());
 
 const cliente = new MongoClient(process.env.URI_MONGO);
 let db;
@@ -17,6 +13,11 @@ let db;
 cliente.connect().then(() => {
     db = cliente.db('batepapo');
 });
+// CONFIG DE CONEXÃO
+const server = express();
+server.use(cors());
+server.use(express.json());
+
 
 //ESQUEMAS DE VALIDAÇÃO
 const userSchema = joi.object({
@@ -45,11 +46,10 @@ server.post("/participants", async (req, res) => {
     const validation = userSchema.validate(user, { abortEarly: true });
     if (validation.error) {
         console.log(validation.error);
-        return sendStatus(422);
+        return res.sendStatus(422);
     }
 
-    const verificaUser = await db.collection('users').findOne(user);
-    console.log(verificaUser)
+    const verificaUser = await db.collection('users').findOne({...user});
     //CONDIÇÃO PARA NÃO LOGAR COM UM USER DE MESMO NOME
     if (verificaUser) {
         res.sendStatus(409);
@@ -90,22 +90,50 @@ server.post("/messages", async (req, res) => {
     }
     try {
         //VERIFICAR SE O PARTICIPANTE EXISTE ANTES DO ENVIO DA MENSSAGEM
-        const verificaUser = await db.collection('users').findOne(from);
+        const verificaUser = await db.collection('users').findOne({ name: from});
         console.log(verificaUser)
         if (!verificaUser) {
             return res.status(422).send("Você não está na sala! Verifique a conexão");
         }
         const messageToServer = {
-            ... message, 
+            ... message,
             from,
             time: dayjs().format('HH:mm:ss')
         }
-        await db.collection("messages").insertOne(messageToServer);
+        await db.collection("messages").insertOne({... messageToServer});
         res.sendStatus(201);
     } catch (error) {
         return res.status(422).send("Verifique a conexão");
     }
-})
+});
+
+server.get("/messages", async (req, res) => {
+    const limit = parseInt(req.query.limit);
+    const user = req.headers.user;
+    
+    try {
+        const messagesDB = await db.collection("messages").find().toArray();
+        const messagesDBtoUser = messagesDB.filter(message => {
+            const {to, from, type} = message;
+            if (to === "Todos" || to === user || from === user || type === "message"){
+                return true;
+            } else {
+                return false;
+            }
+        });
+        if (!limit || isNaN(limit)){
+            res.send(messagesDBtoUser);
+        } else {
+            res.send(messagesDBtoUser.slice(-limit))
+        }
+        
+        res.status(201).send(messagesForFront);
+    } catch (error) {
+        res.sendStatus(404);
+    }
+
+});
+
 
 
 server.listen(5000);
