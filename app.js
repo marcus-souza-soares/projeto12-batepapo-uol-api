@@ -132,14 +132,15 @@ server.get("/messages", async (req, res) => {
     }
 });
 server.post("/status", async (req, res) => {
-    const user = req.headers.user;
-    const verificaUser = await db.collection('users').findOne({ name: user });
-    if (!verificaUser) {
-        return res.status(404).send("Você não está na sala! Verifique a conexão");
-    }
+    const { user } = req.headers;
     try {
-        await db.collection("users").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
-        return res.status(200);
+        const verificaUser = await db.collection('users').findOne({ name: user });
+        if (!verificaUser) {
+            return res.status(404).send("Você não está na sala! Verifique a conexão");
+        }
+        const now = Date.now();
+        await db.collection("users").updateOne({ name: user }, { $set: { lastStatus: now } });
+        res.sendStatus(200);
     } catch (error) {
         res.sendStatus(404);
     }
@@ -150,31 +151,82 @@ server.delete("/messages/:ID_DA_MENSAGEM", async (req, res) => {
     const { ID_DA_MENSAGEM } = req.params;
     console.log(ID_DA_MENSAGEM)
     try {
-        const verify = await db.collection("messages").findOne({ _id: new ObjectId(`${ID_DA_MENSAGEM}`)})
-        if(!verify){
+        const verify = await db.collection("messages").findOne({ _id: new ObjectId(`${ID_DA_MENSAGEM}`) })
+        if (!verify) {
             return res.status(404).send("Não econtrado");
         }
         //CASO O HEADER NÃO SEJA O DONO DA MENSAGEM
-        if (verify.from !== user){
+        if (verify.from !== user) {
             return res.sendStatus(401);
         }
-        await db.collection("messages").deleteOne({ _id: new ObjectId(`${ID_DA_MENSAGEM}`)});
+        await db.collection("messages").deleteOne({ _id: new ObjectId(`${ID_DA_MENSAGEM}`) });
         res.status(201).send("Deletado");
     } catch (error) {
         res.status(404).send("Deu erro");
     }
 });
 
+server.put("/messages/:ID_DA_MENSAGEM", async (req, res) => {
+    const { user } = req.headers;
+    console.log(user)
+    const { ID_DA_MENSAGEM } = req.params;
+    const message = req.body;
+    const validation = messageSchema.validate(message, { abortEarly: true });
+    if (validation.error) {
+        return res.status(422).send("Verifique os campos", validation.error);
+    }
+    try {
+        //VERIFICAR SE O PARTICIPANTE EXISTE ANTES DO ENVIO DA MENSSAGEM
+        const verificaUser = await db.collection('users').findOne({ name: user });
+        console.log(verificaUser)
+        if (!verificaUser) {
+            return res.status(422).send("Você não está na sala! Verifique a conexão");
+        }
+        const { to, text, type } = message;
+        // const messageModified = {
+        //     ...message,
+        //     from,
+        //     time: dayjs().format('HH:mm:ss')
+        // }
+        const verify = await db.collection("messages").findOne({ _id: new ObjectId(`${ID_DA_MENSAGEM}`) })
+        console.log(verify)
+        console.log(user)
+        if (!verify) {
+            return res.status(404).send("Não econtrado");
+        }
+        //CASO O HEADER NÃO SEJA O DONO DA MENSAGEM
+        if (verify.from !== user) {
+            return res.sendStatus(401);
+        }
+        await db.collection("messages").updateOne(
+            {
+                _id: verify.id
+            },
+            {
+                $set: {
+                    to: to,
+                    text: text,
+                    type: type,
+                    time: dayjs().format('HH:mm:ss')
+                }
+            })
+    } catch (error) {
+        return res.status(404).send("Não foi possivel enviar");
+    }
+});
+
+
+
 setInterval(async () => {
     const now = Date.now();
     try {
         const disabledUsers = await db.collection("users").find({ lastStatus: { $lt: (now - (10 * 1000)) } }).toArray();
-        if (disabledUsers.length > 0){
+        if (disabledUsers.length > 0) {
             console.log(disabledUsers)
         }
         await db.collection("users").deleteMany({ lastStatus: { $lt: (now - (10 * 1000)) } });
         console.log("deletou!")
-        if (disabledUsers.length > 0){
+        if (disabledUsers.length > 0) {
             const exitMessages = disabledUsers.map(user => {
                 return {
                     from: user.name,
